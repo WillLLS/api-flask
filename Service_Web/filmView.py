@@ -240,7 +240,7 @@ class FilmAll(Resource):
                 locations.append({
                     'titre':titre,
                     'categorie':i[2],
-                    'location':'categorieFilm/'+idcat+'/film/'+str(i[0])})
+                    'location':'/film/'+str(i[0])})
         except sqlite3.Error as e:
             print("Erreur",e)
             connection.rollback()
@@ -282,12 +282,13 @@ class editFilm(Resource):
 
                 cursor.execute('INSERT INTO film (titre_film,acteurs_film,annee_realisation,duree_film,resume_film,age_min) VALUES(?,?,?,?,?,?)',new_film)
                 #id = cursor.lastrowid
+                connection.commit()
                 for i in categories:
                     film_cat = (id,i)
                     cursor.execute('INSERT INTO film_categorie VALUES (?,?)',film_cat)
+                    connection.commit()
 
-                connection.commit()
-
+                film['id']=str(id)
                 film['titre']=request.json['titre']
                 film['acteur film']=request.json['acteur_film']
                 film['année réalisation']=request.json['année réalisation']
@@ -423,6 +424,7 @@ class FilmOne(Resource):
     def delete(self,idfilm):
         """
         Supprimer un film 
+        remarque : Le film n'est pas réellement supprimé, il est juste supprimé de la table filme et il est rajouté à la table film supprimé
         """
         connection = sqlite3.connect("video1.db")
         cursor = connection.cursor()
@@ -438,6 +440,15 @@ class FilmOne(Resource):
 
         try:
             film_delete = (int(idfilm),)
+            query1 = 'SELECT * FROM film WHERE id_film = ?'
+            cursor.execute(query1,film_delete)
+            film = cursor.fetchone()
+
+            deleted_film = (film[1],film[2],film[3],film[4],film[5],film[6])
+            query2 = 'INSERT INTO deleted_film (titre_deleted,acteurs_deleted,annee_rea_deleted,duree_deleted,resume_deleted,age_min_deleted) VALUES (?,?,?,?,?,?)'
+            cursor.execute(query2,deleted_film)
+            connection.commit()
+            
             cursor.execute("DELETE FROM film WHERE id_film = ?",film_delete)
             connection.commit()
         except sqlite3.Error as e:
@@ -447,8 +458,74 @@ class FilmOne(Resource):
             connection.close()
             return()
 
+"""
+Lecture des film supprimé
+"""
+@api.route('/film/deletedFilm')
+class AllDeleted(Resource):
+    api.doc(model=get_allfilm)
+    def get(self):
+        """
+        Retourne le titre et la location de tout les films supprimés
+        """
+        locations = []
+        try:
+            connection = sqlite3.connect('video1.db')
+            cursor = connection.cursor()
+        
+            query = """SELECT id_deleted,titre_deleted FROM deleted_film"""
+            
+            cursor.execute(query)
+            films = cursor.fetchall()
+            for i in films:
+                titre = i[1]
+                locations.append({
+                    'titre':titre,
+                    'location':'/film/deletedFilm/'+str(i[0])})
+        except sqlite3.Error as e:
+            print("Erreur",e)
+            connection.rollback()
+        finally:
+            connection.close()
+            return(jsonify(locations))
 
 
+@api.route('/film/deletedFilm/<idfilm>')
+class DeletedFilm(Resource):
+    @api.doc(model=filmget)
+    def get(self,idfilm):
+        """
+        Retourne le détail du film supprimé
+        """
+        connection = sqlite3.connect('video1.db')
+        cursor = connection.cursor()
+        cursor.execute("SELECT id_deleted FROM deleted_film")
+        last_id = len(cursor.fetchall())
+
+        if int(idfilm) > last_id or int(idfilm)==0:
+            connection.close()
+            abort(404)
+
+        id = (int(idfilm),)
+        query1 = 'SELECT * FROM deleted_film WHERE id_deleted = ?'
+        cursor.execute(query1,id)
+        film = cursor.fetchone()
+
+        film_detail = {
+            'id':film[0],
+            'titre':film[1],
+            'acteur film':film[2],
+            'annee realisation':film[3],
+            'duree':film[4],
+            'resume film':film[5],
+            'age minimum':film[6]
+        }
+
+        connection.close()
+
+        response = jsonify(film_detail)
+        response.status=200
+        return response 
 
 
 
